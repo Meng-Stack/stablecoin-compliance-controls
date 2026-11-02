@@ -24,6 +24,15 @@ jobs:
       - name: Unit tests and invariant fuzzing
         run: forge test --mc "Security|Invariants" -vv
 
+      - name: Symbolic proofs (Halmos)
+        run: |
+          pip install halmos==0.3.3
+          forge clean
+          halmos --contract HalmosProofs
+
+      - name: Mutation check (proofs are not vacuous)
+        run: python3 scripts/mutation_check.py
+
       - name: Gas benchmarks (isolated transactions)
         run: forge test --isolate --mc Bench
 

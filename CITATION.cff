@@ -8,7 +8,7 @@ authors:
 license: MIT
 version: 0.1.0
 date-released: 2026-11-03
-repository-code: "https://github.com/<your-github-username>/stablecoin-compliance-controls"
+repository-code: "https://github.com/AATF-DEV/stablecoin-compliance-controls"
 keywords:
   - stablecoin
   - GENIUS Act

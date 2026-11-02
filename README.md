@@ -58,7 +58,7 @@ Account states:
 
 ## Safety properties
 
-Checked by stateful fuzzing (`test/Invariants.t.sol`, 256 runs × depth 64 = 16,384 random calls per invariant) and unit tests (`test/Security.t.sol`):
+Proved symbolically with [Halmos](https://github.com/a16z/halmos) (`test/Halmos.t.sol`), and additionally checked by stateful fuzzing (`test/Invariants.t.sol`, 256 runs × depth 64 = 16,384 random calls per invariant) and unit tests (`test/Security.t.sol`):
 
 1. **Hold precedence**: seize and burn debit exactly the requested amount from an existing active hold.
 2. **Spendable-balance safety**: an account's held amount equals the sum of its active holds and never exceeds its balance.
@@ -67,7 +67,15 @@ Checked by stateful fuzzing (`test/Invariants.t.sol`, 256 runs × depth 64 = 16,
 5. **Quorum**: compliance actions require M valid signatures from distinct registered signers. Unit tests cover too few signatures, duplicates, outsiders, replay, tampered calldata, and direct calls.
 6. **Log completeness**: every compliance action extends the hash-chained log by exactly one entry.
 
-Fuzzing is evidence, not proof; formal verification is future work.
+The Halmos checks make the token's entire storage symbolic, so they quantify over all contract states. Each check assumes the invariant for the accounts a call touches, runs one public function with symbolic arguments and caller, and asserts that the invariant still holds and that state changed exactly as specified, including frame conditions that an arbitrary untouched account and an arbitrary other hold record are unchanged. Every state-changing public function is covered (`transfer`, `transferFrom`, `approve`, `mint`, `setStatus`, `blockBatch`, `placeHold`, `releaseHold`, `seize`, `burnFromHold`), and non-authorized callers are proved to be rejected. Starting from the all-zero initial state, this is an inductive proof over all call sequences for invariants 1–4 and 6; each check also asserts that supply and the compliance log change only as specified (non-compliance calls leave the log untouched). For invariant 5, Halmos proves the token side (no caller other than the authority can change compliance state); signature verification in `ComplianceAuthority` is covered by unit tests only. `blockBatch` is checked for batches of one or two addresses.
+
+`scripts/mutation_check.py` confirms the proofs are not vacuous: it injects seven bugs one at a time (a frozen sender allowed to transfer; seizure not reducing the held amount; burning not reducing supply; holds not bounded by the spendable balance; a seizure that deletes a different hold record; `blockBatch` wiping the account's balance; an ordinary transfer advancing the compliance log) and requires a Halmos counterexample for each.
+
+```bash
+pip install halmos==0.3.3
+make prove          # forge clean && halmos --contract HalmosProofs  (~30 s)
+make mutate         # seven injected bugs, each must yield a counterexample (~2 min)
+```
 
 ## Repository layout
 
@@ -76,14 +84,17 @@ Fuzzing is evidence, not proof; formal verification is future work.
 ├── test/
 │   ├── Bench.t.sol           gas benchmarks → results/*.csv
 │   ├── Security.t.sol        unit tests (authorization, state semantics, SMT rejection)
-│   └── Invariants.t.sol      stateful invariant fuzzing
+│   ├── Invariants.t.sol      stateful invariant fuzzing
+│   └── Halmos.t.sol          symbolic proofs of the safety invariants
 ├── scripts/
 │   ├── gen_smt.py            builds SMTs over random restricted addresses → data/
-│   └── plot.py               draws the figure from results/*.csv
+│   ├── plot.py               draws the figure from results/*.csv
+│   └── mutation_check.py     non-vacuity check for the Halmos proofs
 ├── data/                     SMT roots and proofs used by the benchmarks
 ├── results/                  measured gas (committed; CI checks they reproduce exactly)
 ├── docs/                     figure used in this README
 ├── lib/forge-std/            git submodule, pinned to v1.12.0
+├── lib/halmos-cheatcodes/    git submodule (symbolic-testing cheatcodes)
 ├── foundry.toml
 └── Makefile
 ```
@@ -95,7 +106,7 @@ Requirements:
 - Python 3.10+ with `pip install -r requirements.txt`. Python is only needed to regenerate SMT data or the figure.
 
 ```bash
-git clone --recursive https://github.com/<your-github-username>/stablecoin-compliance-controls.git
+git clone --recursive https://github.com/AATF-DEV/stablecoin-compliance-controls.git
 cd stablecoin-compliance-controls
 
 make test     # unit tests + invariant fuzzing
@@ -125,7 +136,7 @@ See [`CITATION.cff`](CITATION.cff), or:
   title  = {Ledger-Level Compliance Controls for Payment Stablecoins: A Reference Architecture
             for Block, Freeze, and Reject Capabilities under the {GENIUS} Act},
   year   = {2026},
-  note   = {Preprint. Code: https://github.com/<your-github-username>/stablecoin-compliance-controls}
+  note   = {Preprint. Code: https://github.com/AATF-DEV/stablecoin-compliance-controls}
 }
 ```
 
