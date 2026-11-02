@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: Tests and gas reproducibility
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.5.1
+
+      - name: Build
+        run: forge build --sizes
+
+      - name: Unit tests and invariant fuzzing
+        run: forge test --mc "Security|Invariants" -vv
+
+      - name: Gas benchmarks (isolated transactions)
+        run: forge test --isolate --mc Bench
+
+      - name: Check committed results are reproduced exactly
+        run: git diff --exit-code -- results/
